@@ -88,22 +88,24 @@ async function validateFunctionUrl(appName: string, functionName: string, projec
     const retries: number = 4;
     await retry(
         async (currentAttempt: number) => {
-            console.log(`copyFunctionUrl Attempt ${currentAttempt}/${retries + 1})...`);
+            ext.outputChannel.appendLog(`copyFunctionUrl attempt ${currentAttempt}/${retries + 1}...`);
             if (currentAttempt !== 1) {
                 await ext.tree.refresh();
             }
-            await copyFunctionUrl(appName, functionName, projectLanguage);
-        },
-        {
-            retries,
-            minTimeout: 5 * 1000,
-            onFailedAttempt: (error) => {
+
+            try {
+                await copyFunctionUrl(appName, functionName, projectLanguage);
+            } catch (error) {
                 // Only retry for errors like "Not all inputs were used: func6c04e44a3a"
-                if (!parseError(error).message.includes('inputs') && !parseError(error).message.includes(functionName)) {
-                    throw new retry.AbortError(error);
+                const message: string = parseError(error).message;
+                if (message.includes('inputs') && message.includes(functionName)) {
+                    throw error;
+                } else {
+                    throw new retry.AbortError(message);
                 }
             }
-        }
+        },
+        { retries, minTimeout: 5 * 1000 }
     );
 
     const functionUrl: string = await vscode.env.clipboard.readText();
