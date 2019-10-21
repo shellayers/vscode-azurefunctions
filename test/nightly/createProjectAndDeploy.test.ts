@@ -6,8 +6,9 @@
 import * as assert from 'assert';
 import * as fse from 'fs-extra';
 import { IHookCallbackContext, ISuiteCallbackContext } from 'mocha';
+import * as retry from 'p-retry';
 import * as vscode from 'vscode';
-import { getRandomHexString, isWindows, ProjectLanguage, requestUtils } from '../../extension.bundle';
+import { ext, getRandomHexString, isWindows, parseError, ProjectLanguage, requestUtils } from '../../extension.bundle';
 import { longRunningTestsEnabled, testUserInput, testWorkspacePath } from '../global.test';
 import { getCSharpValidateOptions, getJavaScriptValidateOptions, getPowerShellValidateOptions, getPythonValidateOptions, getTypeScriptValidateOptions, IValidateProjectOptions, validateProject } from '../validateProject';
 import { getRotatingAuthLevel, getRotatingLocation } from './getRotatingValue';
@@ -70,7 +71,7 @@ async function testCreateProjectAndDeploy(validateProjectOptions: IValidateProje
     await validateFunctionUrl(appName, functionName, projectLanguage);
 }
 
-async function validateFunctionUrl(appName: string, functionName: string, projectLanguage: ProjectLanguage): Promise<void> {
+async function copyFunctionUrl(appName: string, functionName: string, projectLanguage: ProjectLanguage): Promise<void> {
     const inputs: (string | RegExp)[] = [appName, functionName];
     if (projectLanguage !== ProjectLanguage.CSharp) { // CSharp doesn't support local project tree view
         inputs.unshift(/^((?!Local Project).)*$/i); // match any item except local project
@@ -80,6 +81,31 @@ async function validateFunctionUrl(appName: string, functionName: string, projec
     await testUserInput.runWithInputs(inputs, async () => {
         await vscode.commands.executeCommand('azureFunctions.copyFunctionUrl');
     });
+}
+
+async function validateFunctionUrl(appName: string, functionName: string, projectLanguage: ProjectLanguage): Promise<void> {
+    // Retry copying the function url a few times because there seems to be a delay between deploying and the function showing up in the list
+    const retries: number = 4;
+    await retry(
+        async (currentAttempt: number) => {
+            console.log(`copyFunctionUrl Attempt ${currentAttempt}/${retries + 1})...`);
+            if (currentAttempt !== 1) {
+                await ext.tree.refresh();
+            }
+            await copyFunctionUrl(appName, functionName, projectLanguage);
+        },
+        {
+            retries,
+            minTimeout: 5 * 1000,
+            onFailedAttempt: (error) => {
+                // Only retry for errors like "Not all inputs were used: func6c04e44a3a"
+                if (!parseError(error).message.includes('inputs') && !parseError(error).message.includes(functionName)) {
+                    throw new retry.AbortError(error);
+                }
+            }
+        }
+    );
+
     const functionUrl: string = await vscode.env.clipboard.readText();
 
     const request: requestUtils.Request = await requestUtils.getDefaultRequest(functionUrl);
