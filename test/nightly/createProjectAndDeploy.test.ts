@@ -8,7 +8,7 @@ import * as fse from 'fs-extra';
 import { IHookCallbackContext, ISuiteCallbackContext } from 'mocha';
 import * as retry from 'p-retry';
 import * as vscode from 'vscode';
-import { ext, getRandomHexString, isWindows, parseError, ProjectLanguage, requestUtils } from '../../extension.bundle';
+import { ext, getRandomHexString, isWindows, ProjectLanguage, requestUtils } from '../../extension.bundle';
 import { longRunningTestsEnabled, testUserInput, testWorkspacePath } from '../global.test';
 import { getCSharpValidateOptions, getJavaScriptValidateOptions, getPowerShellValidateOptions, getPythonValidateOptions, getTypeScriptValidateOptions, IValidateProjectOptions, validateProject } from '../validateProject';
 import { getRotatingAuthLevel, getRotatingLocation } from './getRotatingValue';
@@ -93,17 +93,7 @@ async function validateFunctionUrl(appName: string, functionName: string, projec
                 await ext.tree.refresh();
             }
 
-            try {
-                await copyFunctionUrl(appName, functionName, projectLanguage);
-            } catch (error) {
-                // Only retry for errors like "Not all inputs were used: func6c04e44a3a"
-                const message: string = parseError(error).message;
-                if (message.includes('inputs') && message.includes(functionName)) {
-                    throw error;
-                } else {
-                    throw new retry.AbortError(message);
-                }
-            }
+            await copyFunctionUrl(appName, functionName, projectLanguage);
         },
         { retries, minTimeout: 5 * 1000 }
     );

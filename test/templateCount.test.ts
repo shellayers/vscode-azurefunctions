@@ -37,7 +37,7 @@ function addSuite(source: TemplateSource | undefined): void {
             if (!longRunningTestsEnabled) {
                 this.skip();
             }
-            this.timeout(120 * 1000);
+            this.timeout(4 * 60 * 1000);
 
             // Java templates require you to have a project open, so create one here
             if (!await fse.pathExists(path.join(testWorkspacePath, 'pom.xml'))) { // No need to create for every template source
